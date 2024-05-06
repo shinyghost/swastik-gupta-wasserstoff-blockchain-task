@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Token and ETH Locker</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3/dist/web3.min.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f0f8ff;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            max-width: 800px; /* Adjusts the max width of the container */
+        }
+
+        .form-container {
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            width: 48%; /* Each form takes nearly half of the container width */
+            margin: 10px;
+        }
+
+        h1, h2 {
+            color: #0077CC;
+            text-align: center;
+        }
+
+        input, button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 8px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: #0077CC;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #005fa3;
+        }
+
+        #status {
+            text-align: center;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <h1>Token and ETH Locker Interface</h1>
+
+        <button onclick="connectWallet()">Connect to MetaMask</button>
+        <div id="status"></div>
+
+        <form id="lockTokensForm">
+            <h2>Lock Tokens</h2>
+            Token Address: <input id="tokenAddress" type="text"><br>
+            Amount: <input id="tokenAmount" type="text"><br>
+            Target Chain: <input id="tokenTargetChain" type="text"><br>
+            Target Address: <input id="tokenTargetAddress" type="text"><br>
+            <button type="button" onclick="lockTokens()">Lock Tokens</button>
+        </form>
+
+        <form id="lockEthForm">
+            <h2>Lock ETH</h2>
+            Amount in ETH: <input id="ethAmount" type="text"><br>
+            Target Chain: <input id="ethTargetChain" type="text"><br>
+            Target Address: <input id="ethTargetAddress" type="text"><br>
+            <button type="button" onclick="lockEth()">Lock ETH</button>
+        </form>
+    </div>
+
+    <script>
+        let web3;
+        let accounts;
+        let contract;
+        const contractAddress = '0xe2D17cECB6Ced2A438C0d320b2927d3829A81181';
+        const abi = [
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "newOwner",
+				"type": "address"
+			}
+		],
+		"name": "changeOwner",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"stateMutability": "nonpayable",
+		"type": "constructor"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "sender",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "targetChain",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "targetAddress",
+				"type": "string"
+			}
+		],
+		"name": "EthLocked",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "targetChain",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "targetAddress",
+				"type": "string"
+			}
+		],
+		"name": "lockEth",
+		"outputs": [],
+		"stateMutability": "payable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "token",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			},
+			{
+				"internalType": "string",
+				"name": "targetChain",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "targetAddress",
+				"type": "string"
+			}
+		],
+		"name": "lockTokens",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "token",
+				"type": "address"
+			},
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "sender",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "targetChain",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "targetAddress",
+				"type": "string"
+			}
+		],
+		"name": "TokenLocked",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			}
+		],
+		"name": "withdrawEth",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "token",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			}
+		],
+		"name": "withdrawTokens",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "owner",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	}
+];
+
+        async function connectWallet() {
+            if (window.ethereum) {
+                try {
+                    await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    web3 = new Web3(window.ethereum);
+                    contract = new web3.eth.Contract(abi, contractAddress);
+                    accounts = await web3.eth.getAccounts();
+                    document.getElementById('status').innerText = 'Connected';
+                } catch (error) {
+                    document.getElementById('status').innerText = 'Error connecting';
+                    console.error(error);
+                }
+            } else {
+                document.getElementById('status').innerText = 'Please install MetaMask';
+            }
+        }
+
+        async function lockTokens() {
+            const tokenAddress = document.getElementById('tokenAddress').value;
+            const amount = web3.utils.toWei(document.getElementById('tokenAmount').value, 'ether');
+            const targetChain = document.getElementById('tokenTargetChain').value;
+            const targetAddress = document.getElementById('tokenTargetAddress').value;
+
+            try {
+                await contract.methods.lockTokens(tokenAddress, amount, targetChain, targetAddress).send({ from: accounts[0] });
+                alert('Tokens locked successfully!');
+            } catch (error) {
+                alert('Failed to lock tokens: ' + error.message);
+            }
+        }
+
+        async function lockEth() {
+            const amount = web3.utils.toWei(document.getElementById('ethAmount').value, 'ether');
+            const targetChain = document.getElementById('ethTargetChain').value;
+            const targetAddress = document.getElementById('ethTargetAddress').value;
+
+            try {
+                await contract.methods.lockEth(targetChain, targetAddress).send({ from: accounts[0], value: amount });
+                alert('ETH locked successfully!');
+            } catch (error) {
+                alert('Failed to lock ETH: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
